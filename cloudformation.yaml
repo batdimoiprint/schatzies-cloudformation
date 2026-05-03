@@ -1,0 +1,457 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Schatzies Events - Core Infrastructure Stack
+
+# ??????????????????????????????????????????????
+# PARAMETERS
+# ??????????????????????????????????????????????
+Parameters:
+  DomainName:
+    Type: String
+    Description: The domain name for the certificate (e.g., events.schatzies.com)
+    Default: "schatzies.com"
+
+  CertificateArn:
+    Type: String
+    Description: The ARN of the manually created ACM Certificate (must be in us-east-1 for CloudFront)
+    Default: ""
+
+# ??????????????????????????????????????????????
+# RESOURCES
+# ??????????????????????????????????????????????
+Resources:
+
+  # ?? S3: Deployments & Hosting ????????????????
+  SchatziesDeploymentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: schatzies-events-deployments
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  SchatziesDeploymentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SchatziesDeploymentBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${SchatziesDeploymentBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+
+  SchatziesGeneralBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: schatzies-general-bucket
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # ?? CloudFront: CDN ??????????????????????????
+  SchatziesCloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "schatzies-oac-${AWS::StackName}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SchatziesCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt SchatziesDeploymentBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt SchatziesCloudFrontOAC.Id
+          - DomainName: !Sub "${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: ApiOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: "/api/*"
+            TargetOriginId: ApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # Managed-CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac # Managed-AllViewerExceptHostHeader
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 0
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Aliases:
+          - !Ref DomainName
+          - !Sub "www.${DomainName}"
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # ?? IAM: Lambda Execution Role ???????????????
+  SchatzieslambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: schatzies-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: schatzies-s3-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub "${SchatziesGeneralBucket.Arn}"
+                  - !Sub "${SchatziesGeneralBucket.Arn}/*"
+        - PolicyName: schatzies-dynamodb-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Scan
+                  - dynamodb:Query
+                Resource:
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/schatzies-*"
+                  - !GetAtt SchatziesMainTable.Arn
+                  - !GetAtt SchatziesDashboardAnalyticsTable.Arn
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # ?? Lambda: Backend ???????????????????????????
+  SchatzieslambdaBackend:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: schatzies-backend
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt SchatzieslambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          export const handler = async (event) => {
+            return {
+              statusCode: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*"
+              },
+              body: JSON.stringify({ message: "schatzies-backend is running" })
+            };
+          };
+      MemorySize: 128
+      Timeout: 30
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # ?? API Gateway: HTTP API ?????????????????????
+  SchatzieslambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchatzieslambdaBackend
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*/*"
+
+  SchatziesApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: schatzies-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+      Tags:
+        Project: Schatzies
+        Env: prod
+        CostCenter: schatzies-client
+
+  SchatziesApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref SchatziesApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SchatzieslambdaBackend.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  SchatziesApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref SchatziesApi
+      RouteKey: "$default"
+      Target: !Sub "integrations/${SchatziesApiIntegration}"
+
+  SchatziesApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref SchatziesApi
+      StageName: "$default"
+      AutoDeploy: true
+      Tags:
+        Project: Schatzies
+        Env: prod
+        CostCenter: schatzies-client
+
+  # ?? DynamoDB: Database ????????????????????????
+  SchatziesMainTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: schatzies_main_table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # ?? IAM: Customer Managed Policy ???????????????
+  SchatziesCoreManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: SchatziesCoreAccess
+      Description: Core access policy for Schatzies project resources
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - dynamodb:ListTables
+              - dynamodb:DescribeTable
+            Resource: "*"
+
+  # ?? IAM: Users ?????????????????????????????????
+  SchatziesLocalDevUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: schatzies-local-dev
+      ManagedPolicyArns:
+        - !Ref SchatziesCoreManagedPolicy
+      Policies:
+        - PolicyName: SchatziesLocalDevInline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - dynamodb:*
+                  - lambda:*
+                  - apigateway:*
+                  - acm:*
+                  - cloudfront:*
+                Resource:
+                  - !Sub "${SchatziesDeploymentBucket.Arn}"
+                  - !Sub "${SchatziesDeploymentBucket.Arn}/*"
+                  - !Sub "${SchatziesGeneralBucket.Arn}"
+                  - !Sub "${SchatziesGeneralBucket.Arn}/*"
+                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/schatzies-*"
+                  - !GetAtt SchatziesMainTable.Arn
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
+                  - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
+                  - !Sub
+                    - "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExternalApiId}/*"
+                    - ExternalApiId: !ImportValue SchatziesExternalApiId
+                  - !Sub
+                    - "arn:aws:apigateway:${AWS::Region}::/apis/${ExternalApiId}"
+                    - ExternalApiId: !ImportValue SchatziesExternalApiId
+                  - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  SchatziesGithubActionsUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: schatzies-github-actions
+      ManagedPolicyArns:
+        - !Ref SchatziesCoreManagedPolicy
+      Policies:
+        - PolicyName: SchatziesGithubActionsInline
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - apigateway:*
+                  - acm:DescribeCertificate
+                  - acm:ListCertificates
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                  - cloudfront:GetDistribution
+                Resource:
+                  - !Sub "${SchatziesDeploymentBucket.Arn}"
+                  - !Sub "${SchatziesDeploymentBucket.Arn}/*"
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
+                  - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
+                  - !Sub
+                    - "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExternalApiId}/*"
+                    - ExternalApiId: !ImportValue SchatziesExternalApiId
+                  - !Sub
+                    - "arn:aws:apigateway:${AWS::Region}::/apis/${ExternalApiId}"
+                    - ExternalApiId: !ImportValue SchatziesExternalApiId
+                  - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+# ??????????????????????????????????????????????
+# OUTPUTS
+# ??????????????????????????????????????????????
+Outputs:
+
+  FrontendBucketURL:
+    Description: S3 Static Website URL (via Deployment Bucket)
+    Value: !GetAtt SchatziesDeploymentBucket.WebsiteURL
+
+  ApiEndpoint:
+    Description: API Gateway Endpoint URL
+    Value: !Sub "https://${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Value: !Ref SchatzieslambdaBackend
+
+  MainTableName:
+    Description: DynamoDB Main Table Name
+    Value: !Ref SchatziesMainTable
+
+  CertificateArnProvided:
+    Description: The ARN of the manually provided ACM Certificate
+    Value: !Ref CertificateArn
+
+  DeploymentBucketName:
+    Description: S3 Deployment Bucket Name (also serves Frontend)
+    Value: !Ref SchatziesDeploymentBucket
+
+  GeneralBucketName:
+    Description: S3 General Purpose Bucket Name
+    Value: !Ref SchatziesGeneralBucket
+
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref SchatziesCloudFrontDistribution
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt SchatziesCloudFrontDistribution.DomainName
