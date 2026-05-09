@@ -82,7 +82,7 @@ Resources:
                 TransitionInDays: 90
             NoncurrentVersionTransitions:
               - StorageClass: GLACIER
-                TransitionInNoncurrentDays: 30
+                NoncurrentDays: 30
       VersioningConfiguration:
         Status: Enabled
       Tags:
