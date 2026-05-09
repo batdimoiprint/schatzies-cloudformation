@@ -368,12 +368,6 @@ Resources:
                   - !Sub "${SchatziesTable.Arn}/index/*"
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
                   - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
-                  - !Sub
-                    - "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExternalApiId}/*"
-                    - ExternalApiId: !ImportValue SchatziesExternalApiId
-                  - !Sub
-                    - "arn:aws:apigateway:${AWS::Region}::/apis/${ExternalApiId}"
-                    - ExternalApiId: !ImportValue SchatziesExternalApiId
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
       Tags:
         - Key: Project
@@ -411,12 +405,6 @@ Resources:
                   - !Sub "${SchatziesDeploymentBucket.Arn}/*"
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
                   - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
-                  - !Sub
-                    - "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExternalApiId}/*"
-                    - ExternalApiId: !ImportValue SchatziesExternalApiId
-                  - !Sub
-                    - "arn:aws:apigateway:${AWS::Region}::/apis/${ExternalApiId}"
-                    - ExternalApiId: !ImportValue SchatziesExternalApiId
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
       Tags:
         - Key: Project
