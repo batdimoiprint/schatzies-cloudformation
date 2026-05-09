@@ -475,6 +475,12 @@ Resources:
                 Action:
                   - cloudformation:ListStacks
                 Resource: "*"
+              - Sid: DynamoDBSeedAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource:
+                  - !GetAtt SchatziesTable.Arn
               - Sid: CloudFormationStackAccess
                 Effect: Allow
                 Action:
