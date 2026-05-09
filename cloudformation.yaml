@@ -395,10 +395,14 @@ Resources:
                   - cloudfront:*
                 Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
-              - Sid: CloudFormationAccess
+              - Sid: CloudFormationListAccess
                 Effect: Allow
                 Action:
                   - cloudformation:ListStacks
+                Resource: "*"
+              - Sid: CloudFormationStackAccess
+                Effect: Allow
+                Action:
                   - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:DescribeStackResources
@@ -466,10 +470,14 @@ Resources:
                   - cloudfront:GetDistribution
                 Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
-              - Sid: CloudFormationAccess
+              - Sid: CloudFormationListAccess
                 Effect: Allow
                 Action:
                   - cloudformation:ListStacks
+                Resource: "*"
+              - Sid: CloudFormationStackAccess
+                Effect: Allow
+                Action:
                   - cloudformation:DescribeStacks
                   - cloudformation:DescribeStackEvents
                   - cloudformation:DescribeStackResources
