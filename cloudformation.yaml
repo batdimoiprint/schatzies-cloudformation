@@ -408,7 +408,7 @@ Resources:
                   - cloudformation:DescribeChangeSet
                   - cloudformation:ExecuteChangeSet
                 Resource:
-                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events-stack/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events/*"
       Tags:
         - Key: Project
           Value: Schatzies
@@ -475,7 +475,7 @@ Resources:
                   - cloudformation:DescribeStackResources
                   - cloudformation:GetTemplate
                 Resource:
-                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events-stack/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events/*"
       Tags:
         - Key: Project
           Value: Schatzies
