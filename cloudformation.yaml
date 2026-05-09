@@ -351,23 +351,49 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
+              - Sid: S3Access
+                Effect: Allow
                 Action:
                   - s3:*
-                  - dynamodb:*
-                  - lambda:*
-                  - apigateway:*
-                  - acm:*
-                  - cloudfront:*
                 Resource:
                   - !Sub "${SchatziesDeploymentBucket.Arn}"
                   - !Sub "${SchatziesDeploymentBucket.Arn}/*"
                   - !Sub "${SchatziesGeneralBucket.Arn}"
                   - !Sub "${SchatziesGeneralBucket.Arn}/*"
+              - Sid: DynamoDBAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource:
                   - !GetAtt SchatziesTable.Arn
                   - !Sub "${SchatziesTable.Arn}/index/*"
+              - Sid: LambdaAccess
+                Effect: Allow
+                Action:
+                  - lambda:*
+                Resource:
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
+              - Sid: ApiGatewayExecuteAccess
+                Effect: Allow
+                Action:
+                  - execute-api:*
+                Resource:
                   - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
+              - Sid: ApiGatewayManageAccess
+                Effect: Allow
+                Action:
+                  - apigateway:*
+                Resource: "*"
+              - Sid: AcmAccess
+                Effect: Allow
+                Action:
+                  - acm:*
+                Resource: "*"
+              - Sid: CloudFrontAccess
+                Effect: Allow
+                Action:
+                  - cloudfront:*
+                Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
       Tags:
         - Key: Project
@@ -388,23 +414,43 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Effect: Allow
+              - Sid: S3DeployAccess
+                Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:DeleteObject
+                Resource:
+                  - !Sub "${SchatziesDeploymentBucket.Arn}"
+                  - !Sub "${SchatziesDeploymentBucket.Arn}/*"
+              - Sid: LambdaDeployAccess
+                Effect: Allow
+                Action:
                   - lambda:UpdateFunctionCode
                   - lambda:UpdateFunctionConfiguration
-                  - apigateway:*
+                Resource:
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
+              - Sid: ApiGatewayManageAccess
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PUT
+                  - apigateway:PATCH
+                  - apigateway:DELETE
+                Resource: "*"
+              - Sid: AcmReadAccess
+                Effect: Allow
+                Action:
                   - acm:DescribeCertificate
                   - acm:ListCertificates
+                Resource: "*"
+              - Sid: CloudFrontDeployAccess
+                Effect: Allow
+                Action:
                   - cloudfront:CreateInvalidation
                   - cloudfront:GetInvalidation
                   - cloudfront:GetDistribution
                 Resource:
-                  - !Sub "${SchatziesDeploymentBucket.Arn}"
-                  - !Sub "${SchatziesDeploymentBucket.Arn}/*"
-                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
-                  - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
       Tags:
         - Key: Project
