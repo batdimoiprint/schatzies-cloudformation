@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Schatzies Events - Core Infrastructure Stack
 
-# ??????????????????????????????????????????????
+# ==============================================================
 # PARAMETERS
-# ??????????????????????????????????????????????
+# ==============================================================
 Parameters:
   DomainName:
     Type: String
@@ -15,12 +15,14 @@ Parameters:
     Description: The ARN of the manually created ACM Certificate (must be in us-east-1 for CloudFront)
     Default: ""
 
-# ??????????????????????????????????????????????
+# ==============================================================
 # RESOURCES
-# ??????????????????????????????????????????????
+# ==============================================================
 Resources:
 
-  # ?? S3: Deployments & Hosting ????????????????
+  # --------------------------------------------------------------
+  # S3: Deployment & Frontend Hosting
+  # --------------------------------------------------------------
   SchatziesDeploymentBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -73,7 +75,9 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
-  # ?? CloudFront: CDN ??????????????????????????
+  # --------------------------------------------------------------
+  # CloudFront: CDN & Distribution
+  # --------------------------------------------------------------
   SchatziesCloudFrontOAC:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
@@ -152,8 +156,45 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
-  # ?? IAM: Lambda Execution Role ???????????????
-  SchatzieslambdaExecutionRole:
+  # --------------------------------------------------------------
+  # DynamoDB: Single-Table Database
+  # --------------------------------------------------------------
+  SchatziesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: schatzies_main_table
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: email-index
+          KeySchema:
+            - AttributeName: email
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # --------------------------------------------------------------
+  # IAM: Lambda Execution Role
+  # --------------------------------------------------------------
+  SchatziesLambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: schatzies-lambda-role
@@ -189,12 +230,13 @@ Resources:
                   - dynamodb:GetItem
                   - dynamodb:UpdateItem
                   - dynamodb:DeleteItem
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
                   - dynamodb:Scan
                   - dynamodb:Query
                 Resource:
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/schatzies-*"
-                  - !GetAtt SchatziesMainTable.Arn
-                  - !GetAtt SchatziesDashboardAnalyticsTable.Arn
+                  - !GetAtt SchatziesTable.Arn
+                  - !Sub "${SchatziesTable.Arn}/index/*"
       Tags:
         - Key: Project
           Value: Schatzies
@@ -203,14 +245,16 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
-  # ?? Lambda: Backend ???????????????????????????
-  SchatzieslambdaBackend:
+  # --------------------------------------------------------------
+  # Lambda: Backend Function
+  # --------------------------------------------------------------
+  SchatziesLambdaBackend:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: schatzies-backend
       Runtime: nodejs24.x
       Handler: index.handler
-      Role: !GetAtt SchatzieslambdaExecutionRole.Arn
+      Role: !GetAtt SchatziesLambdaExecutionRole.Arn
       Code:
         ZipFile: |
           export const handler = async (event) => {
@@ -224,7 +268,7 @@ Resources:
             };
           };
       MemorySize: 128
-      Timeout: 30
+      Timeout: 120
       Tags:
         - Key: Project
           Value: Schatzies
@@ -233,11 +277,13 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
-  # ?? API Gateway: HTTP API ?????????????????????
-  SchatzieslambdaPermission:
+  # --------------------------------------------------------------
+  # API Gateway: HTTP API
+  # --------------------------------------------------------------
+  SchatziesLambdaPermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref SchatzieslambdaBackend
+      FunctionName: !Ref SchatziesLambdaBackend
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*/*"
@@ -269,7 +315,7 @@ Resources:
     Properties:
       ApiId: !Ref SchatziesApi
       IntegrationType: AWS_PROXY
-      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SchatzieslambdaBackend.Arn}/invocations"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SchatziesLambdaBackend.Arn}/invocations"
       PayloadFormatVersion: "2.0"
 
   SchatziesApiRoute:
@@ -290,27 +336,9 @@ Resources:
         Env: prod
         CostCenter: schatzies-client
 
-  # ?? DynamoDB: Database ????????????????????????
-  SchatziesMainTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: schatzies_main_table
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
-      Tags:
-        - Key: Project
-          Value: Schatzies
-        - Key: Env
-          Value: prod
-        - Key: CostCenter
-          Value: schatzies-client
-
-  # ?? IAM: Customer Managed Policy ???????????????
+  # --------------------------------------------------------------
+  # IAM: Customer Managed Policy
+  # --------------------------------------------------------------
   SchatziesCoreManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -328,7 +356,9 @@ Resources:
               - dynamodb:DescribeTable
             Resource: "*"
 
-  # ?? IAM: Users ?????????????????????????????????
+  # --------------------------------------------------------------
+  # IAM: Users
+  # --------------------------------------------------------------
   SchatziesLocalDevUser:
     Type: AWS::IAM::User
     Properties:
@@ -353,8 +383,8 @@ Resources:
                   - !Sub "${SchatziesDeploymentBucket.Arn}/*"
                   - !Sub "${SchatziesGeneralBucket.Arn}"
                   - !Sub "${SchatziesGeneralBucket.Arn}/*"
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/schatzies-*"
-                  - !GetAtt SchatziesMainTable.Arn
+                  - !GetAtt SchatziesTable.Arn
+                  - !Sub "${SchatziesTable.Arn}/index/*"
                   - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:schatzies-*"
                   - !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${SchatziesApi}/*"
                   - !Sub
@@ -415,9 +445,9 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
-# ??????????????????????????????????????????????
+# ==============================================================
 # OUTPUTS
-# ??????????????????????????????????????????????
+# ==============================================================
 Outputs:
 
   FrontendBucketURL:
@@ -430,11 +460,11 @@ Outputs:
 
   LambdaFunctionName:
     Description: Lambda Function Name
-    Value: !Ref SchatzieslambdaBackend
+    Value: !Ref SchatziesLambdaBackend
 
-  MainTableName:
-    Description: DynamoDB Main Table Name
-    Value: !Ref SchatziesMainTable
+  TableName:
+    Description: DynamoDB Single Table Name
+    Value: !Ref SchatziesTable
 
   CertificateArnProvided:
     Description: The ARN of the manually provided ACM Certificate
