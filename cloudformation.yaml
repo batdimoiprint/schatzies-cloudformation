@@ -234,7 +234,7 @@ Resources:
     Properties:
       FunctionName: schatzies-backend
       Runtime: nodejs24.x
-      Handler: index.handler
+      Handler: handler.handler
       Role: !GetAtt SchatziesLambdaExecutionRole.Arn
       Code:
         ZipFile: |
