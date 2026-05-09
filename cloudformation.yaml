@@ -80,9 +80,6 @@ Resources:
             Transitions:
               - StorageClass: GLACIER
                 TransitionInDays: 90
-            NoncurrentVersionTransitions:
-              - StorageClass: GLACIER
-                NoncurrentDays: 30
       VersioningConfiguration:
         Status: Enabled
       Tags:
