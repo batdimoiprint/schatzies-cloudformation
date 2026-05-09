@@ -12,7 +12,7 @@ Resources:
   SchatziesDeploymentBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: schatzies-events-deployments
+      BucketName: !Sub "schatzies-events-deployments-${AWS::AccountId}"
       WebsiteConfiguration:
         IndexDocument: index.html
         ErrorDocument: index.html
@@ -47,7 +47,7 @@ Resources:
   SchatziesGeneralBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: schatzies-general-bucket
+      BucketName: !Sub "schatzies-general-bucket-${AWS::AccountId}"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
