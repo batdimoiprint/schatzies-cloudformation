@@ -2,20 +2,6 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Schatzies Events - Core Infrastructure Stack
 
 # ==============================================================
-# PARAMETERS
-# ==============================================================
-Parameters:
-  DomainName:
-    Type: String
-    Description: The domain name for the certificate (e.g., events.schatzies.com)
-    Default: "schatzies.com"
-
-  CertificateArn:
-    Type: String
-    Description: The ARN of the manually created ACM Certificate (must be in us-east-1 for CloudFront)
-    Default: ""
-
-# ==============================================================
 # RESOURCES
 # ==============================================================
 Resources:
@@ -141,13 +127,8 @@ Resources:
             ResponsePagePath: /index.html
             ResponseCode: 200
             ErrorCachingMinTTL: 0
-        ViewerCertificate:
-          AcmCertificateArn: !Ref CertificateArn
-          SslSupportMethod: sni-only
-          MinimumProtocolVersion: TLSv1.2_2021
-        Aliases:
-          - !Ref DomainName
-          - !Sub "www.${DomainName}"
+        # Note: custom domain aliases and ACM certificate are configured
+        # manually on the live CloudFront distribution outside of this template.
       Tags:
         - Key: Project
           Value: Schatzies
@@ -466,9 +447,6 @@ Outputs:
     Description: DynamoDB Single Table Name
     Value: !Ref SchatziesTable
 
-  CertificateArnProvided:
-    Description: The ARN of the manually provided ACM Certificate
-    Value: !Ref CertificateArn
 
   DeploymentBucketName:
     Description: S3 Deployment Bucket Name (also serves Frontend)
