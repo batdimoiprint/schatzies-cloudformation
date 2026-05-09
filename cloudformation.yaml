@@ -395,6 +395,20 @@ Resources:
                   - cloudfront:*
                 Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+              - Sid: CloudFormationAccess
+                Effect: Allow
+                Action:
+                  - cloudformation:ListStacks
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                  - cloudformation:UpdateStack
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                Resource:
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events-stack/*"
       Tags:
         - Key: Project
           Value: Schatzies
@@ -452,6 +466,16 @@ Resources:
                   - cloudfront:GetDistribution
                 Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+              - Sid: CloudFormationAccess
+                Effect: Allow
+                Action:
+                  - cloudformation:ListStacks
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:GetTemplate
+                Resource:
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/schatzies-events-stack/*"
       Tags:
         - Key: Project
           Value: Schatzies
