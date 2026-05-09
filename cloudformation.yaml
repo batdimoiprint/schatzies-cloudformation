@@ -62,6 +62,38 @@ Resources:
           Value: schatzies-client
 
   # --------------------------------------------------------------
+  # S3: Data Backup Bucket (Long-term archival)
+  # --------------------------------------------------------------
+  SchatziesBackupBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "schatzies-data-backups-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveOldBackups
+            Status: Enabled
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+            NoncurrentVersionTransitions:
+              - StorageClass: GLACIER
+                TransitionInNoncurrentDays: 30
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # --------------------------------------------------------------
   # CloudFront: CDN & Distribution
   # --------------------------------------------------------------
   SchatziesCloudFrontOAC:
@@ -198,9 +230,24 @@ Resources:
                   - s3:PutObject
                   - s3:GetObject
                   - s3:ListBucket
+                  - s3:DeleteObject
                 Resource:
                   - !Sub "${SchatziesGeneralBucket.Arn}"
                   - !Sub "${SchatziesGeneralBucket.Arn}/*"
+        - PolicyName: schatzies-backup-s3-access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:ListObjectsV2
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "${SchatziesBackupBucket.Arn}"
+                  - !Sub "${SchatziesBackupBucket.Arn}/*"
         - PolicyName: schatzies-dynamodb-access
           PolicyDocument:
             Version: "2012-10-17"
@@ -257,6 +304,91 @@ Resources:
           Value: prod
         - Key: CostCenter
           Value: schatzies-client
+
+  # --------------------------------------------------------------
+  # Lambda: Scheduled Backup Function
+  # --------------------------------------------------------------
+  SchatziesBackupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: schatzies-dynamo-backup
+      Runtime: nodejs24.x
+      Handler: index.handler
+      Role: !GetAtt SchatziesLambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+          import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+
+          const dynamo = new DynamoDBClient({ region: process.env.AWS_REGION || 'ap-southeast-1' });
+          const s3 = new S3Client({ region: process.env.AWS_REGION || 'ap-southeast-1' });
+          const TABLE = process.env.DYNAMO_TABLE;
+          const BUCKET = process.env.BACKUP_BUCKET;
+
+          export const handler = async (event) => {
+            try {
+              const items = [];
+              let lastKey = undefined;
+              do {
+                const result = await dynamo.send(new ScanCommand({
+                  TableName: TABLE,
+                  ExclusiveStartKey: lastKey,
+                }));
+                items.push(...(result.Items || []));
+                lastKey = result.LastEvaluatedKey;
+              } while (lastKey);
+
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+              const key = `backups/${timestamp}/full-backup.json`;
+
+              await s3.send(new PutObjectCommand({
+                Bucket: BUCKET,
+                Key: key,
+                Body: JSON.stringify({ timestamp: new Date().toISOString(), itemCount: items.length, items }),
+                ContentType: 'application/json',
+              }));
+
+              return { statusCode: 200, body: JSON.stringify({ message: 'Backup successful', key, itemCount: items.length }) };
+            } catch (err) {
+              console.error('Backup failed:', err);
+              return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
+            }
+          };
+      Environment:
+        Variables:
+          DYNAMO_TABLE: !Ref SchatziesTable
+          BACKUP_BUCKET: !Ref SchatziesBackupBucket
+      MemorySize: 512
+      Timeout: 300
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # --------------------------------------------------------------
+  # EventBridge: Weekly Backup Schedule (Every Sunday at midnight UTC)
+  # --------------------------------------------------------------
+  SchatziesBackupScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: schatzies-weekly-backup
+      Description: Triggers DynamoDB backup to S3 every Sunday at midnight UTC
+      ScheduleExpression: "cron(0 0 ? * SUN *)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SchatziesBackupLambda.Arn
+          Id: WeeklyBackupTarget
+
+  SchatziesBackupSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SchatziesBackupLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SchatziesBackupScheduleRule.Arn
 
   # --------------------------------------------------------------
   # API Gateway: HTTP API
@@ -360,6 +492,8 @@ Resources:
                   - !Sub "${SchatziesDeploymentBucket.Arn}/*"
                   - !Sub "${SchatziesGeneralBucket.Arn}"
                   - !Sub "${SchatziesGeneralBucket.Arn}/*"
+                  - !Sub "${SchatziesBackupBucket.Arn}"
+                  - !Sub "${SchatziesBackupBucket.Arn}/*"
               - Sid: DynamoDBAccess
                 Effect: Allow
                 Action:
@@ -535,3 +669,11 @@ Outputs:
   CloudFrontDomainName:
     Description: CloudFront Distribution Domain Name
     Value: !GetAtt SchatziesCloudFrontDistribution.DomainName
+
+  BackupBucketName:
+    Description: S3 Backup Bucket Name (Long-term archival)
+    Value: !Ref SchatziesBackupBucket
+
+  BackupLambdaFunctionName:
+    Description: Backup Lambda Function Name
+    Value: !Ref SchatziesBackupLambda
