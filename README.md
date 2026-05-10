@@ -1,57 +1,57 @@
-# Schatzies Events - Infrastructure as Code (CloudFormation)
+# Schatzies Events - CloudFormation
 
-This repository contains the AWS CloudFormation templates for the Schatzies Events infrastructure. It defines a serverless, highly available, and secure environment for hosting both the frontend and the backend API.
+![System Architecture](./systemarchitecture.webp)
 
-## Architecture Overview
+This template defines the core AWS infrastructure for Schatzies Events. The diagram shows the main runtime flow: the frontend is deployed to S3 and served through CloudFront, API requests go through API Gateway to the backend Lambda, application data is stored in DynamoDB, user-uploaded or generated content is stored in S3, and a scheduled backup Lambda copies DynamoDB data into an S3 backup bucket with lifecycle archival to Glacier.
 
-The infrastructure is designed using AWS best practices for security and scalability:
+## What This Stack Creates
 
-### 1. Frontend Hosting (S3 + CloudFront)
-- **AWS S3:** A private bucket (`schatzies-events-deployments`) serves as the origin for all static assets (React/Vite build).
-- **AWS CloudFront:** Acts as the Content Delivery Network (CDN) and SSL/TLS terminator.
-- **Origin Access Control (OAC):** Ensures the S3 bucket remains private, allowing access only via CloudFront.
-- **SPA Support:** Custom error responses handle client-side routing by redirecting 403/404 errors to `index.html`.
+- A deployment S3 bucket for static frontend assets, fronted by CloudFront with Origin Access Control
+- A general-purpose S3 bucket for application content
+- A versioned S3 backup bucket with a lifecycle rule that transitions older backups to Glacier after 90 days
+- A CloudFront distribution that serves the SPA and forwards `/api/*` traffic to API Gateway
+- An HTTP API Gateway with a `$default` route to the backend Lambda
+- A `schatzies-backend` Lambda function
+- A `schatzies-dynamo-backup` Lambda function scheduled weekly by EventBridge
+- A DynamoDB table named `schatzies_main_table` with `PK` / `SK` keys and an `email-index` GSI
+- IAM roles, a shared managed policy, and scoped IAM users for local development and GitHub Actions
 
-### 2. Backend API (API Gateway + Lambda)
-- **AWS API Gateway (HTTP API):** Provides a performant and cost-effective entry point for the backend.
-- **AWS Lambda:** Runs the Node.js backend logic in a serverless environment.
-- **API Proxying:** CloudFront routes all `/api/*` traffic to API Gateway, allowing the frontend and backend to share the same domain and avoid CORS issues.
+## Architecture Notes
 
-### 3. Database (DynamoDB)
-- **AWS DynamoDB:** NoSQL database with Pay-Per-Request billing for cost efficiency.
-  - `schatzies_main_table`: Core data storage.
-  - `schatzies_dashboard_analytics_table`: Analytics and reporting data.
+- Frontend assets are stored in a private deployment bucket and accessed through CloudFront only.
+- CloudFront is configured for SPA routing by returning `index.html` for `403` and `404` responses.
+- `/api/*` requests are sent through CloudFront to the HTTP API, which invokes the backend Lambda.
+- The backend Lambda has read/write access to the main DynamoDB table and the general S3 bucket.
+- The backup Lambda scans the DynamoDB table on a weekly schedule and writes JSON backups into the backup bucket.
+- The backup bucket is versioned and automatically archives older backup objects to Glacier.
+- The template does not store credentials, access keys, certificates, or other secrets in source control.
 
-### 4. Security & Identity (IAM)
-- **Least Privilege Roles:** Lambda execution roles are scoped strictly to the required S3 and DynamoDB resources.
-- **Local Development User:** A dedicated IAM user for secure local access to cloud resources.
-- **GitHub Actions User:** Scoped permissions for automated deployments.
+## Deployment Notes
 
----
-
-## Getting Started
-
-### Prerequisites
-- AWS CLI installed and configured.
-- An existing ACM Certificate ARN (must be in `us-east-1` for CloudFront).
-
-### Deployment
+Deploy the stack with named IAM capability enabled:
 
 ```bash
 aws cloudformation deploy \
   --template-file cloudformation.yaml \
-  --stack-name schatzies-infrastructure-prod \
-  --parameter-overrides \
-    DomainName=yourdomain.com \
-    CertificateArn=arn:aws:acm:us-east-1:123456789012:certificate/uuid \
+  --stack-name schatzies-events \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
----
+## Outputs
 
-## Clean Up
-To remove all resources created by a stack:
-```bash
-aws cloudformation delete-stack --stack-name <your-stack-name>
-```
-*Note: S3 buckets must be emptied manually before the stack can be fully deleted.*
+The stack exports values for:
+
+- Frontend website URL
+- API endpoint
+- Backend Lambda function name
+- DynamoDB table name
+- Deployment bucket name
+- General bucket name
+- Backup bucket name
+- Backup Lambda function name
+- CloudFront distribution ID and domain name
+
+## Important Scope Notes
+
+- Custom domain aliases and the ACM certificate for the live CloudFront distribution are handled outside this template.
+- The Lambda code embedded in this template is minimal bootstrap code; production application code may be updated separately after stack creation.
