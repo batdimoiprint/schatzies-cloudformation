@@ -305,6 +305,9 @@ Resources:
           };
       MemorySize: 128
       Timeout: 120
+      Environment:
+        Variables:
+          API_GATEWAY_URL: !Sub "https://${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
       Tags:
         - Key: Project
           Value: Schatzies
@@ -421,6 +424,7 @@ Resources:
           - GET
           - POST
           - PUT
+          - PATCH
           - DELETE
           - OPTIONS
         AllowHeaders:
