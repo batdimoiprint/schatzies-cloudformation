@@ -2,6 +2,24 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Schatzies Events - Core Infrastructure Stack
 
 # ==============================================================
+# PARAMETERS (secrets — passed at deploy via --parameter-overrides,
+# never stored in this template/git)
+# ==============================================================
+Parameters:
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    Description: JWT signing secret for the backend API.
+  SmtpPass:
+    Type: String
+    NoEcho: true
+    Description: SMTP password (Gmail app password) for outbound email.
+  VapidPrivateKey:
+    Type: String
+    NoEcho: true
+    Description: VAPID private key for web-push.
+
+# ==============================================================
 # RESOURCES
 # ==============================================================
 Resources:
@@ -308,6 +326,19 @@ Resources:
       Environment:
         Variables:
           API_GATEWAY_URL: !Sub "https://${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
+          NODE_ENV: production
+          FRONTEND_URL: https://www.schatziesevents.com
+          AWS_DYNAMO_TABLE: !Ref SchatziesTable
+          AWS_GENERAL_BUCKET: !Ref SchatziesGeneralBucket
+          AWS_BACKUP_BUCKET: !Ref SchatziesBackupBucket
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "465"
+          SMTP_USER: schatzieseventsadmin@gmail.com
+          SMTP_PASS: !Ref SmtpPass
+          VAPID_SUBJECT: mailto:schatzieseventsadmin@gmail.com
+          VAPID_PUBLIC_KEY: BAVi75QDhcGZY_NeGrFiWo3PKOGSEZMNQuOF-zP-1uarQfIwGwt2EnqGosQ0WWutMMAbSrybvjqWKLlvBIQJMOo
+          VAPID_PRIVATE_KEY: !Ref VapidPrivateKey
+          JWT_SECRET: !Ref JwtSecret
       Tags:
         - Key: Project
           Value: Schatzies
