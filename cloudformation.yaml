@@ -120,6 +120,40 @@ Resources:
           Value: schatzies-client
 
   # --------------------------------------------------------------
+  # S3: Staging Frontend Bucket (public website, dev branch)
+  # --------------------------------------------------------------
+  SchatziesStagingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "schatzies-staging-${AWS::AccountId}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: staging
+        - Key: CostCenter
+          Value: schatzies-client
+
+  SchatziesStagingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SchatziesStagingBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${SchatziesStagingBucket.Arn}/*"
+
+  # --------------------------------------------------------------
   # CloudFront: CDN & Distribution
   # --------------------------------------------------------------
   SchatziesCloudFrontOAC:
@@ -130,28 +164,6 @@ Resources:
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
-
-  # CloudFront Function: Rewrite /staging/* SPA routes to /staging/index.html
-  SchatziesStagingSpaFunction:
-    Type: AWS::CloudFront::Function
-    Properties:
-      Name: !Sub "schatzies-staging-spa-${AWS::StackName}"
-      AutoPublish: true
-      FunctionConfig:
-        Comment: Rewrite staging SPA routes to /staging/index.html
-        Runtime: cloudfront-js-2.0
-      FunctionCode: |
-        function handler(event) {
-          var request = event.request;
-          var uri = request.uri;
-          // Only rewrite /staging/ paths that look like SPA routes (no file extension)
-          if (uri.startsWith('/staging/') && !uri.substring(uri.lastIndexOf('/') + 1).includes('.')) {
-            request.uri = '/staging/index.html';
-          } else if (uri === '/staging') {
-            request.uri = '/staging/index.html';
-          }
-          return request;
-        }
 
   SchatziesCloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
@@ -184,9 +196,6 @@ Resources:
             - OPTIONS
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
           Compress: true
-          FunctionAssociations:
-            - EventType: viewer-request
-              FunctionARN: !GetAtt SchatziesStagingSpaFunction.FunctionARN
         CacheBehaviors:
           - PathPattern: "/api/*"
             TargetOriginId: ApiOrigin
@@ -352,7 +361,7 @@ Resources:
         Variables:
           API_GATEWAY_URL: !Sub "https://${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
           NODE_ENV: production
-          FRONTEND_URL: https://www.schatziesevents.com
+          FRONTEND_URL: !Sub "https://www.schatziesevents.com,${SchatziesStagingBucket.WebsiteURL}"
           AWS_DYNAMO_TABLE: !Ref SchatziesTable
           AWS_GENERAL_BUCKET: !Ref SchatziesGeneralBucket
           AWS_BACKUP_BUCKET: !Ref SchatziesBackupBucket
@@ -767,6 +776,14 @@ Outputs:
   BackupLambdaFunctionName:
     Description: Backup Lambda Function Name
     Value: !Ref SchatziesBackupLambda
+
+  StagingBucketName:
+    Description: S3 Staging Bucket Name
+    Value: !Ref SchatziesStagingBucket
+
+  StagingWebsiteURL:
+    Description: Staging Frontend URL (public S3 website)
+    Value: !GetAtt SchatziesStagingBucket.WebsiteURL
 
   AdminAccessKeyId:
     Description: Admin user Access Key ID
