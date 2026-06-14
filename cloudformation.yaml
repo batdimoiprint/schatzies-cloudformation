@@ -749,6 +749,7 @@ Resources:
                   - cloudfront:GetDistribution
                 Resource:
                   - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesCloudFrontDistribution}"
+                  - !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${SchatziesStagingDistribution}"
               - Sid: CloudFormationListAccess
                 Effect: Allow
                 Action:
