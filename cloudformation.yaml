@@ -131,6 +131,28 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
+  # CloudFront Function: Rewrite /staging/* SPA routes to /staging/index.html
+  SchatziesStagingSpaFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "schatzies-staging-spa-${AWS::StackName}"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Rewrite staging SPA routes to /staging/index.html
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri;
+          // Only rewrite /staging/ paths that look like SPA routes (no file extension)
+          if (uri.startsWith('/staging/') && !uri.substring(uri.lastIndexOf('/') + 1).includes('.')) {
+            request.uri = '/staging/index.html';
+          } else if (uri === '/staging') {
+            request.uri = '/staging/index.html';
+          }
+          return request;
+        }
+
   SchatziesCloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -162,6 +184,9 @@ Resources:
             - OPTIONS
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # Managed-CachingOptimized
           Compress: true
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SchatziesStagingSpaFunction.FunctionARN
         CacheBehaviors:
           - PathPattern: "/api/*"
             TargetOriginId: ApiOrigin
