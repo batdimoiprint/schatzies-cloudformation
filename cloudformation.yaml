@@ -675,6 +675,28 @@ Resources:
         - Key: CostCenter
           Value: schatzies-client
 
+  # --------------------------------------------------------------
+  # IAM: Admin User (full access for CLI / manual ops)
+  # --------------------------------------------------------------
+  SchatziesAdminUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: schatzies-admin
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: prod
+        - Key: CostCenter
+          Value: schatzies-client
+
+  SchatziesAdminAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref SchatziesAdminUser
+
 # ==============================================================
 # OUTPUTS
 # ==============================================================
@@ -720,3 +742,11 @@ Outputs:
   BackupLambdaFunctionName:
     Description: Backup Lambda Function Name
     Value: !Ref SchatziesBackupLambda
+
+  AdminAccessKeyId:
+    Description: Admin user Access Key ID
+    Value: !Ref SchatziesAdminAccessKey
+
+  AdminSecretAccessKey:
+    Description: Admin user Secret Access Key (retrieve once, store securely)
+    Value: !GetAtt SchatziesAdminAccessKey.SecretAccessKey
