@@ -651,6 +651,8 @@ Resources:
                 Resource:
                   - !Sub "${SchatziesDeploymentBucket.Arn}"
                   - !Sub "${SchatziesDeploymentBucket.Arn}/*"
+                  - !Sub "${SchatziesStagingBucket.Arn}"
+                  - !Sub "${SchatziesStagingBucket.Arn}/*"
               - Sid: LambdaDeployAccess
                 Effect: Allow
                 Action:
