@@ -154,6 +154,72 @@ Resources:
             Resource: !Sub "${SchatziesStagingBucket.Arn}/*"
 
   # --------------------------------------------------------------
+  # CloudFront: Staging Distribution (isolated, HTTPS)
+  # --------------------------------------------------------------
+  SchatziesStagingDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Staging preview (dev branch)
+        Origins:
+          - DomainName: !GetAtt SchatziesStagingBucket.RegionalDomainName
+            Id: StagingS3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt SchatziesCloudFrontOAC.Id
+          - DomainName: !Sub "${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
+            Id: StagingApiOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+        Enabled: true
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          TargetOriginId: StagingS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+        CacheBehaviors:
+          - PathPattern: "/api/*"
+            TargetOriginId: StagingApiOrigin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponsePagePath: /index.html
+            ResponseCode: 200
+            ErrorCachingMinTTL: 0
+      Tags:
+        - Key: Project
+          Value: Schatzies
+        - Key: Env
+          Value: staging
+        - Key: CostCenter
+          Value: schatzies-client
+
+  # --------------------------------------------------------------
   # CloudFront: CDN & Distribution
   # --------------------------------------------------------------
   SchatziesCloudFrontOAC:
@@ -361,7 +427,7 @@ Resources:
         Variables:
           API_GATEWAY_URL: !Sub "https://${SchatziesApi}.execute-api.${AWS::Region}.amazonaws.com"
           NODE_ENV: production
-          FRONTEND_URL: !Sub "https://www.schatziesevents.com,${SchatziesStagingBucket.WebsiteURL}"
+          FRONTEND_URL: !Sub "https://www.schatziesevents.com,https://${SchatziesStagingDistribution.DomainName}"
           AWS_DYNAMO_TABLE: !Ref SchatziesTable
           AWS_GENERAL_BUCKET: !Ref SchatziesGeneralBucket
           AWS_BACKUP_BUCKET: !Ref SchatziesBackupBucket
@@ -783,9 +849,13 @@ Outputs:
     Description: S3 Staging Bucket Name
     Value: !Ref SchatziesStagingBucket
 
-  StagingWebsiteURL:
-    Description: Staging Frontend URL (public S3 website)
-    Value: !GetAtt SchatziesStagingBucket.WebsiteURL
+  StagingDistributionId:
+    Description: Staging CloudFront Distribution ID
+    Value: !Ref SchatziesStagingDistribution
+
+  StagingURL:
+    Description: Staging Frontend URL (HTTPS via CloudFront)
+    Value: !Sub "https://${SchatziesStagingDistribution.DomainName}"
 
   AdminAccessKeyId:
     Description: Admin user Access Key ID
